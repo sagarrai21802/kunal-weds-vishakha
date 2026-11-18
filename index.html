@@ -316,37 +316,59 @@ function celebrate(){if(RM)return;$("flash").classList.add("go");thump();
 setTimeout(function(){boom(W/2,H/2,160,0,17);cannons()},140);setTimeout(function(){boom(W/2,H*.38,90,0,12)},700)}
 new IntersectionObserver(function(es,o){if(es[0].isIntersecting&&document.body.classList.contains("opened")){o.disconnect();if(!RM){thump();cannons();setTimeout(function(){boom(W/2,H*.35,80,0,12)},350)}}},{threshold:.5}).observe(document.querySelector(".count"));
 document.querySelector(".names").addEventListener("click",function(e){if(!RM)boom(e.clientX,e.clientY,70,0,11)});
-/* music: tanpura drone, a slow Bhupali-style melody, temple bells, all synthesised */
-var AC,MU,MG,mOn=false,KB={},tt=[],ti=0,NF=[220,246.94,293.66,329.63,369.99,440,493.88,587.33],
-PH=[[2,3,4,5,4,3,2],[5,6,7,6,5,4,3],[4,5,6,7,6,5,4,2],[2,4,3,2,1,0,2],[3,4,5,4,3,2,3,1,2],[0,2,3,4,5,7,5,4]];
-function T(f,ms){tt.push(setTimeout(f,ms));if(tt.length>60)tt.splice(0,30)}
-function mk(f,sec,dmp,br){var sr=AC.sampleRate,N=Math.round(sr/f-.5),n=sr*sec|0,b=AC.createBuffer(1,n,sr),d=b.getChannelData(0),r=new Float32Array(N),p=0,i,k=0,j;
-for(i=0;i<N;i++){p+=br*((Math.random()*2-1)-p);r[i]=p*(1.4-br*.5)}
-for(i=0;i<n;i++){j=(k+1)%N;d[i]=r[k];r[k]=dmp*.5*(r[k]+r[j]);k=j}
-return{b:b,pr:f/(sr/(N+.5))}}
-function pl(o,t,g,pan,det){var s=AC.createBufferSource(),gn=AC.createGain();s.buffer=o.b;s.playbackRate.value=o.pr*(det||1);gn.gain.value=g;s.connect(gn);
-if(AC.createStereoPanner){var pn=AC.createStereoPanner();pn.pan.value=pan||0;gn.connect(pn);pn.connect(MU)}else gn.connect(MU);s.start(t)}
-function bell(f,g){var t=AC.currentTime;[1,2.76,5.4,8.93].forEach(function(m,i){var o=AC.createOscillator(),n=AC.createGain();o.frequency.value=f*m;n.gain.setValueAtTime(0,t);n.gain.linearRampToValueAtTime(g/(i+1),t+.012);n.gain.exponentialRampToValueAtTime(.0001,t+3.4/(i+1));o.connect(n);n.connect(MG);o.start(t);o.stop(t+3.5)})}
-function thump(){if(!AC||!mOn)return;var t=AC.currentTime,o=AC.createOscillator(),g=AC.createGain(),sr=AC.sampleRate,nb=AC.createBuffer(1,sr*.3|0,sr),d=nb.getChannelData(0),s=AC.createBufferSource(),f=AC.createBiquadFilter(),ng=AC.createGain(),i;
-o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(40,t+.45);g.gain.setValueAtTime(.9,t);g.gain.exponentialRampToValueAtTime(.001,t+.6);o.connect(g);g.connect(MG);o.start(t);o.stop(t+.7);
-for(i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,3);s.buffer=nb;f.type="bandpass";f.frequency.value=1800;ng.gain.value=.5;s.connect(f);f.connect(ng);ng.connect(MG);s.start(t);
-for(i=0;i<6;i++)(function(k){setTimeout(function(){if(mOn)bell(1300+Math.random()*1700,.05)},220+k*120)})(i)}
-function tan(){if(!mOn||!KB.p)return;var k=[KB.p,KB.s,KB.s,KB.l][ti++%4];pl(k,AC.currentTime+.03,.8,ti%2?-.3:.3);T(tan,1300)}
-function phrase(){if(!mOn||!KB.m0)return;var p=PH[Math.random()*PH.length|0],i=0;(function nx(){if(!mOn)return;var o=KB["m"+p[i]];pl(o,AC.currentTime+.02,1,.15);pl(o,AC.currentTime+.04,.4,-.25,1.004);i++;if(i<p.length)T(nx,480+Math.random()*320);else T(phrase,2600+Math.random()*3200)})()}
-function startMusic(){try{
-if(navigator.audioSession)navigator.audioSession.type="playback";
-AC=new(window.AudioContext||window.webkitAudioContext)();AC.resume();
-var cp=AC.createDynamicsCompressor(),rv=AC.createConvolver(),wt=AC.createGain(),l=AC.sampleRate*2.8|0,ib=AC.createBuffer(2,l,AC.sampleRate),c,i,d;
-for(c=0;c<2;c++){d=ib.getChannelData(c);for(i=0;i<l;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/l,2.6)}
-rv.buffer=ib;wt.gain.value=.4;MG=AC.createGain();MG.gain.value=.9;MU=AC.createGain();MU.gain.value=0;
-MU.connect(MG);MG.connect(cp);MG.connect(rv);rv.connect(wt);wt.connect(cp);cp.connect(AC.destination);
-mOn=true;$("snd").classList.remove("off");$("snd").setAttribute("aria-pressed","true");
-setTimeout(function(){NF.forEach(function(f,i){KB["m"+i]=mk(f,2.6,.9965,.95)});KB.p=mk(110,7,.9993,.55);KB.s=mk(293.66,7,.9988,.6);KB.l=mk(146.83,7,.9992,.5);
-MU.gain.setTargetAtTime(1,AC.currentTime,1.6);bell(880,.14);tan();T(phrase,3800)},120)}catch(e){}}
-$("snd").addEventListener("click",function(){if(!AC)return;mOn=!mOn;
-if(mOn){AC.resume();MG.gain.setTargetAtTime(.9,AC.currentTime,.3);tan();T(phrase,1500)}else{MG.gain.setTargetAtTime(0,AC.currentTime,.2);tt.forEach(clearTimeout);tt=[]}
-this.setAttribute("aria-pressed",mOn);this.classList.toggle("off",!mOn)});
-document.addEventListener("visibilitychange",function(){if(!AC)return;if(document.hidden)AC.suspend();else if(mOn)AC.resume()});
+/* music: custom bg track – starts at 1:40, low volume, fade-in & slow fade-out */
+var BGM=null,BGM_CTX=null,BGM_GAIN=null,mOn=false;
+var SONG_SRC="bg.mp3",SONG_START=100,FADE_IN_SEC=4,FADE_OUT_SEC=8,TARGET_VOL=0.09;
+function thump(){}
+function startMusic(){
+  if(BGM_CTX)return;
+  try{
+    if(navigator.audioSession)navigator.audioSession.type="playback";
+    BGM_CTX=new(window.AudioContext||window.webkitAudioContext)();
+    BGM_GAIN=BGM_CTX.createGain();
+    BGM_GAIN.gain.setValueAtTime(0,BGM_CTX.currentTime);
+    BGM_GAIN.connect(BGM_CTX.destination);
+    BGM=new Audio(SONG_SRC);
+    BGM.currentTime=SONG_START;
+    BGM.loop=false;
+    var src=BGM_CTX.createMediaElementSource(BGM);
+    src.connect(BGM_GAIN);
+    BGM.play().catch(function(){});
+    BGM_GAIN.gain.linearRampToValueAtTime(TARGET_VOL,BGM_CTX.currentTime+FADE_IN_SEC);
+    mOn=true;
+    $("snd").classList.remove("off");
+    $("snd").setAttribute("aria-pressed","true");
+    BGM.addEventListener("timeupdate",function(){
+      if(!BGM.duration||BGM.duration===Infinity)return;
+      var remaining=BGM.duration-BGM.currentTime;
+      if(remaining<=(FADE_OUT_SEC+0.3)&&!BGM._fadingOut){
+        BGM._fadingOut=true;
+        BGM_GAIN.gain.cancelScheduledValues(BGM_CTX.currentTime);
+        BGM_GAIN.gain.setValueAtTime(BGM_GAIN.gain.value,BGM_CTX.currentTime);
+        BGM_GAIN.gain.linearRampToValueAtTime(0,BGM_CTX.currentTime+FADE_OUT_SEC);
+      }
+    });
+  }catch(e){}
+}
+$("snd").addEventListener("click",function(){
+  if(!BGM_CTX)return;
+  mOn=!mOn;
+  if(mOn){
+    BGM_CTX.resume();BGM.play().catch(function(){});
+    BGM_GAIN.gain.setValueAtTime(BGM_GAIN.gain.value,BGM_CTX.currentTime);
+    BGM_GAIN.gain.linearRampToValueAtTime(TARGET_VOL,BGM_CTX.currentTime+1.5);
+  }else{
+    BGM_GAIN.gain.setValueAtTime(BGM_GAIN.gain.value,BGM_CTX.currentTime);
+    BGM_GAIN.gain.linearRampToValueAtTime(0,BGM_CTX.currentTime+1.2);
+    setTimeout(function(){BGM.pause()},1300);
+  }
+  this.setAttribute("aria-pressed",mOn);this.classList.toggle("off",!mOn);
+});
+document.addEventListener("visibilitychange",function(){
+  if(!BGM_CTX)return;
+  if(document.hidden){BGM.pause();}
+  else if(mOn){BGM_CTX.resume();BGM.play().catch(function(){});}
+});
 
 /* scroll: varmala progress, stacked cards, parallax, sacred-fire sparks */
 var evs=[].slice.call(document.querySelectorAll(".ev")),bar=$("prog"),bz=document.querySelector(".baraat"),tk=0;
