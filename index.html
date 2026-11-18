@@ -316,27 +316,31 @@ function celebrate(){if(RM)return;$("flash").classList.add("go");thump();
 setTimeout(function(){boom(W/2,H/2,160,0,17);cannons()},140);setTimeout(function(){boom(W/2,H*.38,90,0,12)},700)}
 new IntersectionObserver(function(es,o){if(es[0].isIntersecting&&document.body.classList.contains("opened")){o.disconnect();if(!RM){thump();cannons();setTimeout(function(){boom(W/2,H*.35,80,0,12)},350)}}},{threshold:.5}).observe(document.querySelector(".count"));
 document.querySelector(".names").addEventListener("click",function(e){if(!RM)boom(e.clientX,e.clientY,70,0,11)});
-/* music: custom bg track – guaranteed start on button click, 0.3s fade-in, slow fade-out */
-var SONG_SRC="bg.mp3",SONG_START=100,FADE_IN_SEC=0.3,FADE_OUT_SEC=8,TARGET_VOL=0.09;
+/* music: auto-start with gradual fade-in (0 -> 10% -> 20% ... -> target vol) */
+var SONG_SRC="bg.mp3",SONG_START=100,FADE_OUT_SEC=8,TARGET_VOL=0.09;
+var FADE_STEPS=10,FADE_STEP_MS=300; /* 10 steps x 300ms = 3 sec total fade-in */
 var BGM=null,BGM_CTX=null,BGM_GAIN=null,BGM_SRC_NODE=null,mOn=false,musicReady=false;
 
-/* Pre-load audio element immediately so it is ready before the click */
-function preloadBGM(){
-  if(BGM)return;
-  BGM=new Audio();
-  BGM.preload="auto";
-  BGM.loop=false;
-  BGM.src=SONG_SRC;
-}
-preloadBGM();
+/* Pre-load the audio file as soon as page loads */
+BGM=new Audio();
+BGM.preload="auto";
+BGM.loop=false;
+BGM.src=SONG_SRC;
 
 function thump(){}
 
-/* Called synchronously inside the "Open invitation" click handler.
-   The Audio.play() call must happen in the SAME call stack as the user gesture
-   to satisfy browser autoplay policy. We achieve this by:
-   1. Creating AudioContext inside the click (counts as user gesture)
-   2. Calling BGM.play() immediately (no await, no setTimeout) */
+/* Gradual stair-step fade-in: 0% -> 10% -> 20% -> ... -> 100% of TARGET_VOL */
+function fadeInSteps(){
+  var step=0;
+  var iv=setInterval(function(){
+    step++;
+    if(!BGM_CTX||!BGM_GAIN){clearInterval(iv);return;}
+    var vol=(step/FADE_STEPS)*TARGET_VOL;
+    if(step>=FADE_STEPS){vol=TARGET_VOL;clearInterval(iv);}
+    BGM_GAIN.gain.setValueAtTime(vol,BGM_CTX.currentTime);
+  },FADE_STEP_MS);
+}
+
 function startMusic(){
   if(mOn)return;
   try{
@@ -344,7 +348,6 @@ function startMusic(){
     if(!BGM_CTX){
       BGM_CTX=new(window.AudioContext||window.webkitAudioContext)();
     }
-    /* resume in case browser suspended it */
     BGM_CTX.resume();
 
     if(!BGM_GAIN){
@@ -352,25 +355,21 @@ function startMusic(){
       BGM_GAIN.gain.value=0;
       BGM_GAIN.connect(BGM_CTX.destination);
     }
-
     if(!BGM_SRC_NODE){
       BGM_SRC_NODE=BGM_CTX.createMediaElementSource(BGM);
       BGM_SRC_NODE.connect(BGM_GAIN);
     }
 
-    /* Seek to 1:40 and play — must be synchronous within gesture */
     BGM.currentTime=SONG_START;
-    BGM.play().catch(function(err){console.warn("BGM play blocked:",err);});
-
-    /* 0.3-second fade-in */
-    var now=BGM_CTX.currentTime;
-    BGM_GAIN.gain.cancelScheduledValues(now);
-    BGM_GAIN.gain.setValueAtTime(0,now);
-    BGM_GAIN.gain.linearRampToValueAtTime(TARGET_VOL,now+FADE_IN_SEC);
-
-    mOn=true;
-    $("snd").classList.remove("off");
-    $("snd").setAttribute("aria-pressed","true");
+    BGM.play().then(function(){
+      /* play succeeded - do gradual fade-in */
+      fadeInSteps();
+      mOn=true;
+      $("snd").classList.remove("off");
+      $("snd").setAttribute("aria-pressed","true");
+    }).catch(function(){
+      /* autoplay blocked - will retry on first user interaction */
+    });
 
     /* Fade-out near end of track */
     if(!musicReady){
@@ -387,10 +386,26 @@ function startMusic(){
         }
       });
     }
-  }catch(e){console.warn("startMusic error:",e);}
+  }catch(e){}
 }
 
-/* 🔊 toggle button */
+/* Try to autoplay immediately when page loads */
+startMusic();
+
+/* If browser blocked autoplay, start on the VERY FIRST user interaction
+   (any touch, click, or key press - even on the gate screen before "Open invitation") */
+function onFirstInteraction(){
+  if(mOn)return;
+  startMusic();
+  document.removeEventListener("click",onFirstInteraction,true);
+  document.removeEventListener("touchstart",onFirstInteraction,true);
+  document.removeEventListener("keydown",onFirstInteraction,true);
+}
+document.addEventListener("click",onFirstInteraction,true);
+document.addEventListener("touchstart",onFirstInteraction,true);
+document.addEventListener("keydown",onFirstInteraction,true);
+
+/* toggle button */
 $("snd").addEventListener("click",function(){
   if(!BGM_CTX){startMusic();return;}
   mOn=!mOn;
@@ -399,8 +414,7 @@ $("snd").addEventListener("click",function(){
     BGM_CTX.resume();
     BGM.play().catch(function(){});
     BGM_GAIN.gain.cancelScheduledValues(now);
-    BGM_GAIN.gain.setValueAtTime(BGM_GAIN.gain.value,now);
-    BGM_GAIN.gain.linearRampToValueAtTime(TARGET_VOL,now+0.6);
+    fadeInSteps();
   }else{
     BGM_GAIN.gain.cancelScheduledValues(now);
     BGM_GAIN.gain.setValueAtTime(BGM_GAIN.gain.value,now);
