@@ -316,58 +316,109 @@ function celebrate(){if(RM)return;$("flash").classList.add("go");thump();
 setTimeout(function(){boom(W/2,H/2,160,0,17);cannons()},140);setTimeout(function(){boom(W/2,H*.38,90,0,12)},700)}
 new IntersectionObserver(function(es,o){if(es[0].isIntersecting&&document.body.classList.contains("opened")){o.disconnect();if(!RM){thump();cannons();setTimeout(function(){boom(W/2,H*.35,80,0,12)},350)}}},{threshold:.5}).observe(document.querySelector(".count"));
 document.querySelector(".names").addEventListener("click",function(e){if(!RM)boom(e.clientX,e.clientY,70,0,11)});
-/* music: custom bg track – starts at 1:40, low volume, fade-in & slow fade-out */
-var BGM=null,BGM_CTX=null,BGM_GAIN=null,mOn=false;
-var SONG_SRC="bg.mp3",SONG_START=100,FADE_IN_SEC=4,FADE_OUT_SEC=8,TARGET_VOL=0.09;
+/* music: custom bg track – guaranteed start on button click, 0.3s fade-in, slow fade-out */
+var SONG_SRC="bg.mp3",SONG_START=100,FADE_IN_SEC=0.3,FADE_OUT_SEC=8,TARGET_VOL=0.09;
+var BGM=null,BGM_CTX=null,BGM_GAIN=null,BGM_SRC_NODE=null,mOn=false,musicReady=false;
+
+/* Pre-load audio element immediately so it is ready before the click */
+function preloadBGM(){
+  if(BGM)return;
+  BGM=new Audio();
+  BGM.preload="auto";
+  BGM.loop=false;
+  BGM.src=SONG_SRC;
+}
+preloadBGM();
+
 function thump(){}
+
+/* Called synchronously inside the "Open invitation" click handler.
+   The Audio.play() call must happen in the SAME call stack as the user gesture
+   to satisfy browser autoplay policy. We achieve this by:
+   1. Creating AudioContext inside the click (counts as user gesture)
+   2. Calling BGM.play() immediately (no await, no setTimeout) */
 function startMusic(){
-  if(BGM_CTX)return;
+  if(mOn)return;
   try{
     if(navigator.audioSession)navigator.audioSession.type="playback";
-    BGM_CTX=new(window.AudioContext||window.webkitAudioContext)();
-    BGM_GAIN=BGM_CTX.createGain();
-    BGM_GAIN.gain.setValueAtTime(0,BGM_CTX.currentTime);
-    BGM_GAIN.connect(BGM_CTX.destination);
-    BGM=new Audio(SONG_SRC);
+    if(!BGM_CTX){
+      BGM_CTX=new(window.AudioContext||window.webkitAudioContext)();
+    }
+    /* resume in case browser suspended it */
+    BGM_CTX.resume();
+
+    if(!BGM_GAIN){
+      BGM_GAIN=BGM_CTX.createGain();
+      BGM_GAIN.gain.value=0;
+      BGM_GAIN.connect(BGM_CTX.destination);
+    }
+
+    if(!BGM_SRC_NODE){
+      BGM_SRC_NODE=BGM_CTX.createMediaElementSource(BGM);
+      BGM_SRC_NODE.connect(BGM_GAIN);
+    }
+
+    /* Seek to 1:40 and play — must be synchronous within gesture */
     BGM.currentTime=SONG_START;
-    BGM.loop=false;
-    var src=BGM_CTX.createMediaElementSource(BGM);
-    src.connect(BGM_GAIN);
-    BGM.play().catch(function(){});
-    BGM_GAIN.gain.linearRampToValueAtTime(TARGET_VOL,BGM_CTX.currentTime+FADE_IN_SEC);
+    BGM.play().catch(function(err){console.warn("BGM play blocked:",err);});
+
+    /* 0.3-second fade-in */
+    var now=BGM_CTX.currentTime;
+    BGM_GAIN.gain.cancelScheduledValues(now);
+    BGM_GAIN.gain.setValueAtTime(0,now);
+    BGM_GAIN.gain.linearRampToValueAtTime(TARGET_VOL,now+FADE_IN_SEC);
+
     mOn=true;
     $("snd").classList.remove("off");
     $("snd").setAttribute("aria-pressed","true");
-    BGM.addEventListener("timeupdate",function(){
-      if(!BGM.duration||BGM.duration===Infinity)return;
-      var remaining=BGM.duration-BGM.currentTime;
-      if(remaining<=(FADE_OUT_SEC+0.3)&&!BGM._fadingOut){
-        BGM._fadingOut=true;
-        BGM_GAIN.gain.cancelScheduledValues(BGM_CTX.currentTime);
-        BGM_GAIN.gain.setValueAtTime(BGM_GAIN.gain.value,BGM_CTX.currentTime);
-        BGM_GAIN.gain.linearRampToValueAtTime(0,BGM_CTX.currentTime+FADE_OUT_SEC);
-      }
-    });
-  }catch(e){}
+
+    /* Fade-out near end of track */
+    if(!musicReady){
+      musicReady=true;
+      BGM.addEventListener("timeupdate",function(){
+        if(!BGM.duration||BGM.duration===Infinity)return;
+        var remaining=BGM.duration-BGM.currentTime;
+        if(remaining<=(FADE_OUT_SEC+0.3)&&!BGM._fadingOut){
+          BGM._fadingOut=true;
+          var t=BGM_CTX.currentTime;
+          BGM_GAIN.gain.cancelScheduledValues(t);
+          BGM_GAIN.gain.setValueAtTime(BGM_GAIN.gain.value,t);
+          BGM_GAIN.gain.linearRampToValueAtTime(0,t+FADE_OUT_SEC);
+        }
+      });
+    }
+  }catch(e){console.warn("startMusic error:",e);}
 }
+
+/* 🔊 toggle button */
 $("snd").addEventListener("click",function(){
-  if(!BGM_CTX)return;
+  if(!BGM_CTX){startMusic();return;}
   mOn=!mOn;
+  var now=BGM_CTX.currentTime;
   if(mOn){
-    BGM_CTX.resume();BGM.play().catch(function(){});
-    BGM_GAIN.gain.setValueAtTime(BGM_GAIN.gain.value,BGM_CTX.currentTime);
-    BGM_GAIN.gain.linearRampToValueAtTime(TARGET_VOL,BGM_CTX.currentTime+1.5);
+    BGM_CTX.resume();
+    BGM.play().catch(function(){});
+    BGM_GAIN.gain.cancelScheduledValues(now);
+    BGM_GAIN.gain.setValueAtTime(BGM_GAIN.gain.value,now);
+    BGM_GAIN.gain.linearRampToValueAtTime(TARGET_VOL,now+0.6);
   }else{
-    BGM_GAIN.gain.setValueAtTime(BGM_GAIN.gain.value,BGM_CTX.currentTime);
-    BGM_GAIN.gain.linearRampToValueAtTime(0,BGM_CTX.currentTime+1.2);
-    setTimeout(function(){BGM.pause()},1300);
+    BGM_GAIN.gain.cancelScheduledValues(now);
+    BGM_GAIN.gain.setValueAtTime(BGM_GAIN.gain.value,now);
+    BGM_GAIN.gain.linearRampToValueAtTime(0,now+1.2);
+    setTimeout(function(){if(!mOn)BGM.pause();},1300);
   }
-  this.setAttribute("aria-pressed",mOn);this.classList.toggle("off",!mOn);
+  this.setAttribute("aria-pressed",mOn);
+  this.classList.toggle("off",!mOn);
 });
+
 document.addEventListener("visibilitychange",function(){
   if(!BGM_CTX)return;
-  if(document.hidden){BGM.pause();}
-  else if(mOn){BGM_CTX.resume();BGM.play().catch(function(){});}
+  if(document.hidden){
+    BGM.pause();
+  }else if(mOn){
+    BGM_CTX.resume();
+    BGM.play().catch(function(){});
+  }
 });
 
 /* scroll: varmala progress, stacked cards, parallax, sacred-fire sparks */
